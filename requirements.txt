@@ -1,1 +1,9 @@
 # Dependencies  
+django
+djangorestframework
+transformers
+torchaudio
+mediapipe
+opencv-python
+gtts
+mpg321

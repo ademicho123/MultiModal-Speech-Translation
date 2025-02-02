@@ -1,0 +1,14 @@
+# Project Structure
+
+├── multimodal_translation/  # Django project
+│   ├── translation_app/     # Django app
+│   │   ├── models.py        # (If needed, optional)
+│   │   ├── views.py         # Handles API requests
+│   │   ├── urls.py          # API endpoints
+│   │   ├── services.py      # Core logic for speech, text, and sign processing
+│   ├── multimodal_translation/
+│   │   ├── settings.py      # Django settings
+│   │   ├── urls.py          # Global URL config
+│   ├── manage.py            # Django entry point
+│   ├── requirements.txt     # Dependencies
+
