@@ -2,7 +2,6 @@
 
 ├── multimodal_translation/  # Django project
 │   ├── translation_app/     # Django app
-│   │   ├── models.py        # (If needed, optional)
 │   │   ├── views.py         # Handles API requests
 │   │   ├── urls.py          # API endpoints
 │   │   ├── services.py      # Core logic for speech, text, and sign processing
@@ -12,3 +11,5 @@
 │   ├── manage.py            # Django entry point
 │   ├── requirements.txt     # Dependencies
 
+Used for the STT, TTS and TTT translation
+# facebook/seamless-m4t-large

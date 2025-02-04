@@ -1,6 +1,7 @@
 from django.urls import path
-from .views import translate_view
+from . import views
 
 urlpatterns = [
-    path("translate/", translate_view, name="translate"),
+    path('sign-to-speech/', views.process_sign_language, name='sign_to_speech'),
+    path('speech-to-sign/', views.process_speech, name='speech_to_sign'),
 ]

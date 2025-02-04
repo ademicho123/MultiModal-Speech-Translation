@@ -2,8 +2,10 @@
 django
 djangorestframework
 transformers
+torch
+soundfile
 torchaudio
-mediapipe
+protobuf
+sentencepiece
 opencv-python
-gtts
-mpg321
+pillow

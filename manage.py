@@ -1,16 +1,16 @@
-# Runs models for real-time transcription and translation  
+import os
+import sys
 
-from models.stt import transcribe_speech
-from models.ttt import translate_text
-from models.sign_language import recognize_sign_language
+def main():
+    """ Run administrative tasks. """
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "multimodal_translation.settings")
+    try:
+        from django.core.management import execute_from_command_line
+    except ImportError as exc:
+        raise ImportError(
+            "Couldn't import Django. Ensure it's installed and available on your PYTHONPATH."
+        ) from exc
+    execute_from_command_line(sys.argv)
 
-def multimodal_translation(audio_path=None, text=None, video_path=None, tgt_lang="fr"):
-    result = {}
-    if audio_path:
-        result["speech_to_text"] = transcribe_speech(audio_path)
-        result["translated_text"] = translate_text(result["speech_to_text"], tgt_lang=tgt_lang)
-    if text:
-        result["translated_text"] = translate_text(text, tgt_lang=tgt_lang)
-    if video_path:
-        result["sign_language"] = recognize_sign_language(video_path)
-    return result
+if __name__ == "__main__":
+    main()
