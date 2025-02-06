@@ -1,98 +1,40 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import json
-import logging
-import numpy as np
 from .services import TranslationService
 
-logger = logging.getLogger(__name__)
-
-# Initialize the translation service
-try:
-    translator = TranslationService()
-    logger.info("Successfully initialized TranslationService")
-except Exception as e:
-    logger.error(f"Failed to initialize translator: {str(e)}")
-    translator = None
+translator = TranslationService()
 
 @csrf_exempt
 def process_speech(request):
-    """Endpoint for processing speech to text"""
+    """ Endpoint for Speech-to-Text (STT) """
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)
     
-    if translator is None:
-        return JsonResponse({"error": "Translation service is not available"}, status=503)
-        
     try:
         data = json.loads(request.body)
-        audio_data = np.array(data['audio'])
-        source_language = data.get('source_language', 'en')
-        
-        text = translator.speech_to_text(audio_data, source_language)
-        
-        return JsonResponse({
-            "text": text,
-            "status": "success"
-        })
-        
+        audio_path = data.get("audio_path")
+        text = translator.speech_to_text(audio_path)
+        return JsonResponse({"text": text, "status": "success"})
     except Exception as e:
-        logger.error(f"Error processing speech: {str(e)}")
         return JsonResponse({"error": str(e)}, status=500)
 
 @csrf_exempt
 def translate_text(request):
-    """Endpoint for text-to-text translation"""
+    """ Endpoint for Text-to-Text (TTT) """
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)
     
-    if translator is None:
-        return JsonResponse({"error": "Translation service is not available"}, status=503)
-        
     try:
         data = json.loads(request.body)
-        text = data['text']
-        source_language = data.get('source_language', 'en')
-        target_language = data.get('target_language', 'fr')
-        tone = data.get('tone')
-        context = data.get('context', [])
+        text = data.get("text")
+        src_lang = data.get("source_language", "en")  # Use short codes in API
+        tgt_lang = data.get("target_language", "fr")  # Use short codes in API
         
-        result = translator.translate_text(
-            text=text,
-            src_lang=source_language,
-            tgt_lang=target_language,
-            tone=tone,
-            context=context
-        )
-        
-        return JsonResponse({
-            **result,
-            "status": "success"
-        })
-        
+        if not text:
+            return JsonResponse({"error": "Text is required"}, status=400)
+            
+        translation = translator.translate_text(text, src_lang, tgt_lang)
+        return JsonResponse({"translation": translation, "status": "success"})
     except Exception as e:
-        logger.error(f"Error translating text: {str(e)}")
-        return JsonResponse({"error": str(e)}, status=500)
-
-@csrf_exempt
-def update_glossary(request):
-    """Endpoint for updating custom glossary"""
-    if request.method != "POST":
-        return JsonResponse({"error": "Method not allowed"}, status=405)
-        
-    try:
-        data = json.loads(request.body)
-        source_language = data['source_language']
-        target_language = data['target_language']
-        terms = data['terms']
-        
-        translator.update_glossary(source_language, target_language, terms)
-        
-        return JsonResponse({
-            "status": "success",
-            "message": "Glossary updated successfully"
-        })
-        
-    except Exception as e:
-        logger.error(f"Error updating glossary: {str(e)}")
         return JsonResponse({"error": str(e)}, status=500)

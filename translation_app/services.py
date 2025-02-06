@@ -1,129 +1,75 @@
-from transformers import (
-    AutoModelForSeq2SeqLM,
-    AutoModelForSpeechSeq2Seq,
-    AutoProcessor,
-    AutoTokenizer,
-    pipeline,
-    MBartForConditionalGeneration
-)
 import torch
-from typing import List, Dict, Optional
-import spacy
-import numpy as np
+from transformers import WhisperProcessor, WhisperForConditionalGeneration, AutoTokenizer, AutoModelForSeq2SeqLM
+import librosa
+import os
 
 class TranslationService:
+    """ Uses Whisper for STT and NLLB for TTT """
+
     def __init__(self):
-        # Speech to text model
-        self.speech_model_name = "openai/whisper-large-v3"
-        self.speech_processor = AutoProcessor.from_pretrained(self.speech_model_name)
-        self.speech_model = AutoModelForSpeechSeq2Seq.from_pretrained(self.speech_model_name)
+        #Load Whisper Model for Speech-to-Text
+        self.whisper_model_name = "openai/whisper-large-v3"
+        self.whisper_processor = WhisperProcessor.from_pretrained(self.whisper_model_name)
+        self.whisper_model = WhisperForConditionalGeneration.from_pretrained(self.whisper_model_name)
+
+        # Load NLLB Model for Text Translation
+        self.nllb_model_name = "facebook/nllb-200-distilled-600M"
+        self.nllb_tokenizer = AutoTokenizer.from_pretrained(self.nllb_model_name)
+        self.nllb_model = AutoModelForSeq2SeqLM.from_pretrained(self.nllb_model_name)
+
+    def speech_to_text(self, audio_path):
+        """ Converts speech to text using Whisper """
         
-        # Text to text translation model
-        self.translation_model_name = "facebook/mbart-large-50-many-to-many-mmt"
-        self.translation_model = MBartForConditionalGeneration.from_pretrained(self.translation_model_name)
-        self.translation_tokenizer = AutoTokenizer.from_pretrained(self.translation_model_name)
+        if not os.path.exists(audio_path):
+            return "Error: Audio file not found."
+
+        audio, sr = librosa.load(audio_path, sr=16000)
         
-        # NER model for named entity preservation
-        self.ner_model = spacy.load("en_core_web_trf")
-        
-        # Context window for document-level translation
-        self.context_window_size = 3
-        self.translation_history = []
-        
-        # User-defined glossary
-        self.custom_glossary = {}
-        
-        # Tone mapping for style control
-        self.tone_markers = {
-            "casual": "<casual>",
-            "professional": "<professional>",
-            "formal": "<formal>"
+        if len(audio) == 0:
+            return "Error: Audio file is empty."
+
+        if sr != 16000:
+            audio = librosa.resample(audio, sr, 16000)
+
+        inputs = self.whisper_processor(audio, sampling_rate=16000, return_tensors="pt")
+        with torch.no_grad():
+            predicted_ids = self.whisper_model.generate(inputs.input_features)
+            
+        return self.whisper_processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
+
+    def translate_text(self, text, src_lang="en", tgt_lang="fr"):
+        """ Translates text using NLLB with correct language codes """
+        # Language code mapping
+        LANG_CODES = {
+            "en": "eng_Latn",  # English
+            "fr": "fra_Latn",  # French
+            "es": "spa_Latn",  # Spanish
+            "ar": "ara_Arab",  # Arabic
+            "zh": "zho_Hans",  # Chinese (Simplified)
         }
 
-    def speech_to_text(self, audio_data: np.ndarray, src_lang: str = "en") -> str:
-        """Convert speech to text with improved accuracy"""
-        inputs = self.speech_processor(
-            audio_data, 
-            sampling_rate=16000,
-            return_tensors="pt"
-        )
+        src_lang_code = LANG_CODES.get(src_lang, "eng_Latn")
+        tgt_lang_code = LANG_CODES.get(tgt_lang, "fra_Latn")
+
+        # Prepare inputs with truncation
+        inputs = self.nllb_tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
         
+        # Generate translation with enhanced parameters (similar to your translator_V1.py)
         with torch.no_grad():
-            output = self.speech_model.generate(
+            outputs = self.nllb_model.generate(
                 **inputs,
-                language=src_lang,
-                task="transcribe"
+                forced_bos_token_id=self.nllb_tokenizer.convert_tokens_to_ids(tgt_lang_code),
+                max_length=512,
+                num_beams=8,
+                length_penalty=1.2,
+                no_repeat_ngram_size=2,
+                early_stopping=True,
+                do_sample=True,
+                top_k=50,
+                top_p=0.95,
+                temperature=0.7
             )
-            
-        transcription = self.speech_processor.decode(output[0])
-        return transcription
 
-    def translate_text(
-        self,
-        text: str,
-        src_lang: str,
-        tgt_lang: str,
-        tone: Optional[str] = None,
-        context: Optional[List[str]] = None
-    ) -> Dict[str, str]:
-        """Translate text with context awareness and style control"""
-        # Apply NER to preserve named entities
-        doc = self.ner_model(text)
-        entities = {ent.text: ent.label_ for ent in doc.ents}
-        
-        # Apply custom glossary
-        for term, translation in self.custom_glossary.get(f"{src_lang}-{tgt_lang}", {}).items():
-            text = text.replace(term, f"<gloss>{translation}</gloss>")
-        
-        # Add context from previous translations
-        if context:
-            self.translation_history = context[-self.context_window_size:]
-        context_text = " ".join(self.translation_history + [text])
-        
-        # Add tone marker if specified
-        if tone and tone in self.tone_markers:
-            context_text = f"{self.tone_markers[tone]} {context_text}"
-
-        # Perform translation
-        inputs = self.translation_tokenizer(
-            context_text,
-            return_tensors="pt",
-            padding=True,
-            truncation=True
-        )
-        
-        with torch.no_grad():
-            outputs = self.translation_model.generate(
-                **inputs,
-                forced_bos_token_id=self.translation_tokenizer.lang_code_to_id[tgt_lang],
-                max_length=1024
-            )
-        
-        translation = self.translation_tokenizer.decode(outputs[0], skip_special_tokens=True)
-        
-        # Restore named entities
-        for entity, label in entities.items():
-            translation = translation.replace(f"<{label}>{entity}</{label}>", entity)
-        
-        # Store translation in history
-        self.translation_history.append(text)
-        if len(self.translation_history) > self.context_window_size:
-            self.translation_history.pop(0)
-            
-        return {
-            "translation": translation,
-            "entities": entities,
-            "context_used": bool(context),
-            "tone_applied": tone
-        }
-
-    def update_glossary(self, src_lang: str, tgt_lang: str, terms: Dict[str, str]):
-        """Update custom glossary for specific language pair"""
-        lang_pair = f"{src_lang}-{tgt_lang}"
-        if lang_pair not in self.custom_glossary:
-            self.custom_glossary[lang_pair] = {}
-        self.custom_glossary[lang_pair].update(terms)
-
-    def clear_translation_history(self):
-        """Clear context history"""
-        self.translation_history = []
+        # Decode the translation
+        translation = self.nllb_tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
+        return translation

@@ -9,3 +9,5 @@ protobuf
 sentencepiece
 opencv-python
 pillow
+spacy
+librosa
